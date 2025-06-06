@@ -78,12 +78,17 @@ function vrun() {
     return 1
   fi
 
-  if [[ ! -f "${venvpath}/bin/activate" ]]; then
+  if [[ ! -f "${venvpath}/bin/activate" ]] && [[ ! -f "${venvpath}/Scripts/activate" ]]; then
     echo >&2 "Error: '${name}' is not a proper virtual environment"
     return 1
   fi
+  if [[ -f "${venvpath}/bin/activate" ]]; then  
+    source "${venvpath}/bin/activate" || return $?
+  fi
+  if [[ -f "${venvpath}/Scripts/activate" ]]; then
+    source "${venvpath}/Scripts/activate" || return $?
+  fi
 
-  . "${venvpath}/bin/activate" || return $?
   echo "Activated virtual environment ${name}"
 }
 
@@ -103,17 +108,26 @@ if [[ "$PYTHON_AUTO_VRUN" == "true" ]]; then
   function auto_vrun() {
     # deactivate if we're on a different dir than VIRTUAL_ENV states
     # we don't deactivate subdirectories!
-    if (( $+functions[deactivate] )) && [[ $PWD != ${VIRTUAL_ENV:h}* ]]; then
-      deactivate > /dev/null 2>&1
-    fi
+    if (( $+functions[deactivate] )) && [[ -n "${VIRTUAL_ENV}" ]] && [[ "$PWD" != "${VIRTUAL_ENV:h}/"* ]]; then
+        deactivate > /dev/null 2>&1        
+    fi  
 
-    if [[ $PWD != ${VIRTUAL_ENV:h} ]]; then
+    # Only run check if the virtual environment isn't set	
+    if (( ! $+VIRTUAL_ENV )); then	
       local file
-      for file in "${^PYTHON_VENV_NAMES[@]}"/bin/activate(N.); do
-        # make sure we're not in a venv already
-        (( $+functions[deactivate] )) && deactivate > /dev/null 2>&1
-        source $file > /dev/null 2>&1
-        break
+      local -a folders=(
+          "bin"
+          # Windows venv activation scripts are in the Scripts directory
+          "Scripts"
+        )
+
+      for venv_name in "${PYTHON_VENV_NAMES[@]}"; do
+        for folder in "${folders[@]}"; do
+          for file in "${venv_name}/${folder}"/activate(N.); do
+            source $file > /dev/null 2>&1
+            break 3
+          done
+        done
       done
     fi
   }
